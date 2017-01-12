@@ -1,0 +1,64 @@
+#!/bin/bash -ex
+#
+# Update the flattened CEF tree to a newer version
+#
+
+# Select Chromium 56
+# https://bitbucket.org/chromiumembedded/cef/wiki/BranchesAndBuilding#markdown-header-current-release-branches-supported
+CEF_BRANCH=2924
+
+cd $(dirname $0)
+
+rm -rf stage
+mkdir stage
+(
+  cd stage
+  git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+  wget https://bitbucket.org/chromiumembedded/cef/raw/$CEF_BRANCH/tools/automate/automate-git.py
+)
+
+python stage/automate-git.py \
+  --download-dir=stage \
+  --depot-tools-dir=stage/depot_tools \
+  --no-distrib \
+  --no-build \
+  --branch=$CEF_BRANCH \
+
+# Apply CEF patches to Chromium
+(
+  set -x
+  cd stage
+  cp -f ../setup .
+  source setup
+
+  cd chromium/src
+  ./build/linux/sysroot_scripts/install-sysroot.py --arch=arm
+
+  cd cef
+  export GYP_DEFINES=target_arch=arm
+  export GN_DEFINES="is_official_build=true use_sysroot=true use_allocator=none symbol_level=1"
+  ./cef_create_projects.sh
+  cd ..
+
+  # Exclude (most) generated GN output
+  find out ! -type d ! -name args.gn | xargs rm -vf
+)
+
+
+DIRS="depot_tools chromium"
+
+for dir in $DIRS; do
+  if [[ -d $dir ]]; then
+    git rm -rf $dir
+    rm -rf $dir
+  fi
+done
+
+for dir in $DIRS; do
+  cp -ra stage/$dir $dir
+  find $dir -name .git -type d | xargs rm -rf
+  git add $dir
+done
+
+git commit -m "Import of CEF $CEF_BRANCH"
+

@@ -1,0 +1,11 @@
+# source me
+
+cd $(dirname $(readlink -f ${BASH_SOURCE[0]}))
+
+if [[ $(uname) != Linux ]]; then
+  echo Sorry, Linux only
+else
+  echo Adding depot_tools/ to PATH
+  export PATH=$(pwd)/depot_tools:$PATH
+fi
+
